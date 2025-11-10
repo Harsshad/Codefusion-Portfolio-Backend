@@ -1,30 +1,36 @@
 const express = require('express');
 const admin = require('firebase-admin');
-admin.initializeApp();
+
+const fs = require('fs');
+const serviceAccount = JSON.parse(
+  fs.readFileSync('/etc/secrets/serviceAccountKey.json', 'utf8')
+);
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  projectId: process.env.FIREBASE_PROJECT_ID
+});
+
 
 const db = admin.firestore();
 
 const app = express();
-
-// To parse JSON in request body if needed
 app.use(express.json());
 
 app.get('/profile/:username', async (req, res) => {
   const username = req.params.username;
 
   try {
-    // Search in users collection
-    let userSnap = await db.collection('users')
+    let doc = null;
+
+    const userSnap = await db.collection('users')
       .where('username', '==', username)
       .limit(1)
       .get();
 
-    let doc;
     if (!userSnap.empty) {
       doc = userSnap.docs[0];
     } else {
-      // Search in mentors collection
-      let mentorSnap = await db.collection('mentors')
+      const mentorSnap = await db.collection('mentors')
         .where('username', '==', username)
         .limit(1)
         .get();
@@ -64,14 +70,17 @@ app.get('/profile/:username', async (req, res) => {
 
     res.set('Content-Type', 'text/html');
     res.send(html);
-
   } catch (error) {
     console.error('Error fetching portfolio:', error);
     res.status(500).send('Internal server error');
   }
 });
 
-// Use PORT from environment (required for Render) else default 10000
+// Root path optionally
+app.get('/', (req, res) => {
+  res.send('CodeFusion Portfolio API — use /profile/:username');
+});
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
